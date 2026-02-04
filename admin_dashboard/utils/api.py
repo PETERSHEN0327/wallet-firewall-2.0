@@ -2,7 +2,7 @@ import os
 import requests
 from typing import Any, Dict, Optional, Tuple
 
-DEFAULT_BACKEND = "http://127.0.0.1:8000"
+DEFAULT_BACKEND = "http://127.0.0.1:8002"
 
 def backend_base() -> str:
     # 优先环境变量，其次默认本地

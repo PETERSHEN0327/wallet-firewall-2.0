@@ -17,6 +17,7 @@ Thumbs.db
 
 # ===== Database (local dev) =====
 data/app.db
+virtual_wallet/data/*.db
 
 # ===== Logs =====
 *.log

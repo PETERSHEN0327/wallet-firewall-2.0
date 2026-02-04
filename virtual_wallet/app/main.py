@@ -17,7 +17,6 @@ from .db import DATA_DIR, get_session, init_db
 from .generator import generate_transactions, generate_wallets
 from .models import Alert, Transaction, Wallet
 
-
 app = FastAPI(title="Virtual Wallet Lab", version="0.2.0")
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -134,13 +133,12 @@ def transfer(payload: TransferRequest, session: Session = Depends(get_session)) 
     now = datetime.utcnow()
     tx_id = payload.tx_id or f"tx_{int(datetime.utcnow().timestamp())}"
 
-    # === AML check via Wallet Firewall backend (/risk/predict) ===
-    # We keep chain as "wallet" for local simulation; you can change to "ETHEREUM" for display if needed.
+    # === AML check via Wallet Firewall backend (adapter) ===
     aml = check_tx(
         chain="wallet",
         to_address=payload.to_wallet,
         amount_usdt=payload.amount,
-        from_address=payload.from_wallet,  # optional; safe even if adapter ignores it
+        from_address=payload.from_wallet,  # optional
     )
 
     aml_dict = _aml_to_dict(aml)
@@ -149,6 +147,7 @@ def transfer(payload: TransferRequest, session: Session = Depends(get_session)) 
     risk_score = aml.risk_score
     reasons = aml.reason_codes
 
+    # --- BLOCK ---
     if decision == "BLOCK":
         session.add(
             Alert(
@@ -159,11 +158,9 @@ def transfer(payload: TransferRequest, session: Session = Depends(get_session)) 
             )
         )
         session.commit()
-        return {
-            "status": "blocked",
-            "aml": aml_dict,
-        }
+        return {"status": "blocked", "aml": aml_dict}
 
+    # --- REQUIRE_CONFIRM ---
     if decision == "REQUIRE_CONFIRM":
         session.add(
             Alert(
@@ -174,13 +171,9 @@ def transfer(payload: TransferRequest, session: Session = Depends(get_session)) 
             )
         )
         session.commit()
-        return {
-            "status": "require_confirm",
-            "aml": aml_dict,
-            "confirm_token": tx_id,
-        }
+        return {"status": "require_confirm", "aml": aml_dict, "confirm_token": tx_id}
 
-    # === ALLOW => execute transaction ===
+    # --- ALLOW => execute transaction ---
     tx = Transaction(
         tx_id=tx_id,
         from_wallet=payload.from_wallet,
@@ -197,6 +190,7 @@ def transfer(payload: TransferRequest, session: Session = Depends(get_session)) 
     if receiver:
         receiver.balance += payload.amount
 
+    # optional: flag as alert even if allowed but risk level high/medium
     if risk_level in {"HIGH", "MEDIUM"}:
         level = "CRITICAL" if risk_level == "HIGH" else "WARN"
         msg = f"Suspicious transaction detected ({risk_level}): {tx.reason}"
@@ -216,12 +210,47 @@ def list_transactions(
     return {"transactions": txs}
 
 
+# ✅ NEW: true transaction detail by tx_id
+@app.get("/api/transactions/{tx_id}")
+def get_transaction(tx_id: str, session: Session = Depends(get_session)) -> Dict[str, object]:
+    tx = session.get(Transaction, tx_id)
+    if not tx:
+        raise HTTPException(status_code=404, detail="transaction not found")
+    return {"tx": tx}
+
+
 @app.get("/api/alerts")
 def list_alerts(
     limit: int = Query(50, ge=1, le=200),
     session: Session = Depends(get_session),
 ) -> Dict[str, List[Alert]]:
     alerts = session.exec(select(Alert).order_by(Alert.created_at.desc()).limit(limit)).all()
+    return {"alerts": alerts}
+
+
+@app.get("/api/transactions/{tx_id}")
+def get_transaction(tx_id: str, session: Session = Depends(get_session)) -> Dict[str, object]:
+    tx = session.get(Transaction, tx_id)
+    if not tx:
+        raise HTTPException(status_code=404, detail="tx not found")
+    return {"tx": tx}
+
+
+@app.get("/api/alerts/{tx_id}")
+def get_alerts_by_tx(tx_id: str, session: Session = Depends(get_session)) -> Dict[str, List[Alert]]:
+    alerts = session.exec(
+        select(Alert).where(Alert.tx_id == tx_id).order_by(Alert.created_at.desc())
+    ).all()
+    return {"alerts": alerts}
+
+
+
+# ✅ NEW: alerts filtered by tx_id (for Transaction Detail / Intercepts drill-down)
+@app.get("/api/alerts/by-tx/{tx_id}")
+def get_alerts_by_tx(tx_id: str, session: Session = Depends(get_session)) -> Dict[str, List[Alert]]:
+    alerts = session.exec(
+        select(Alert).where(Alert.tx_id == tx_id).order_by(Alert.created_at.desc())
+    ).all()
     return {"alerts": alerts}
 
 
@@ -251,18 +280,19 @@ def generate_dataset(payload: DatasetRequest, session: Session = Depends(get_ses
                 "reason",
             ]
         )
+
         for row in rows:
             sender = session.get(Wallet, row["from_wallet"])
             receiver = session.get(Wallet, row["to_wallet"])
 
-            # Use the same AML adapter for dataset simulation
             aml = check_tx(
-                "wallet",
-                row["to_wallet"],
-                row["amount"],
+                chain="wallet",
+                to_address=row["to_wallet"],
+                amount_usdt=row["amount"],
                 from_address=row.get("from_wallet"),
             )
 
+            # persist to DB if requested
             if payload.persist:
                 tx = Transaction(
                     tx_id=row["tx_id"],
@@ -328,7 +358,5 @@ def confirm_transfer(payload: dict, session: Session = Depends(get_session)) -> 
     if not tx_id:
         raise HTTPException(status_code=400, detail="confirm_token required")
 
-    return {
-        "ok": True,
-        "message": "Confirm endpoint placeholder (implement pending tx storage next)",
-    }
+    # still placeholder: you can implement pending transaction storage later
+    return {"ok": True, "message": "Confirm endpoint placeholder (implement pending tx storage next)"}

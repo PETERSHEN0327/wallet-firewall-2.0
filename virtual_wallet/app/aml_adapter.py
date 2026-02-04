@@ -5,7 +5,7 @@ from uuid import uuid4
 from .aml_client import aml_predict
 
 # === Decision rules (only change here) ===
-WARN_THRESHOLD = 0.0  # >= WARN_THRESHOLD => REQUIRE_CONFIRM
+WARN_THRESHOLD = 0.5  # >= WARN_THRESHOLD => REQUIRE_CONFIRM
 # prediction == "illicit" => BLOCK
 # otherwise => ALLOW
 
@@ -61,7 +61,7 @@ def check_tx(chain: str, to_address: str, amount_usdt: float, from_address: Opti
 
     prediction = (result.get("prediction") or "").lower()
 
-    prediction = "illicit"  # DEMO: force block
+    #prediction = "illicit"  # DEMO: force block//
 
     risk_score = float(result.get("risk_score", 0.0))
 

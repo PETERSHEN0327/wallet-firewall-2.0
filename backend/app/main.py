@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import requests
+
 import joblib
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -196,7 +198,17 @@ def tx_send(request_id: str, forced: bool = False):
 
 @app.get("/admin/intercepts")
 def admin_intercepts(limit: int = 200):
-    return {"items": get_recent_intercepts(limit=limit)}
+    try:
+        r = requests.get(
+            "http://127.0.0.1:8002/api/alerts",
+            params={"limit": limit},
+            timeout=5
+        )
+        r.raise_for_status()
+        data = r.json()
+        return {"items": data.get("alerts", [])}
+    except Exception as e:
+        return {"items": [], "error": str(e)}
 
 
 @app.get("/admin/intercepts/{request_id}")

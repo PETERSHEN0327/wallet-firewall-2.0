@@ -1,27 +1,14 @@
-Wallet Firewall – How to Run
-Virtual Wallet Lab with Integrated AML Decision Engine
-
-Note
-The .venv/ directory and local database files are intentionally excluded from version control.
-Please create your own virtual environment and install dependencies using the provided requirements.txt.
-
-Dataset Note
-The file below is not included in this repository due to GitHub file size limits:
-data/elliptic_txs_features.csv
-
-Please download the Elliptic Bitcoin Dataset separately and place the CSV file under the data/ directory.
-
-Required file:
-data/elliptic_txs_features.csv
-
 Project Overview | 项目简介
-Wallet Firewall is a local full-stack prototype for wallet transaction simulation, AML risk analysis, and decision enforcement.
-The system demonstrates how AML models and rule-based engines can be integrated into a transaction workflow, including ALLOW / WARN / BLOCK decisions.
 
-It consists of:
+Wallet Firewall is a local full-stack prototype for wallet transaction simulation, AML risk analysis, and decision enforcement.
+The system demonstrates how machine-learning-based AML models and rule-based decision engines can be integrated into a transaction workflow, supporting ALLOW / WARN / BLOCK decisions.
+
+System Components
+
 Virtual Wallet UI: Browser-based frontend (FastAPI static UI)
-Backend API: FastAPI + Uvicorn
+Backend API: FastAPI + Uvicorn (AML model inference)
 AML Engine: XGBoost-based AML model + decision adapter
+Admin Dashboard: Streamlit-based monitoring interface
 Data Layer: Local CSV files + SQLite demo database
 
 Wallet Firewall 是一个本地运行的钱包交易与反洗钱（AML）风控原型系统，用于演示：
@@ -29,7 +16,7 @@ Wallet Firewall 是一个本地运行的钱包交易与反洗钱（AML）风控�
 AML 风险评分与模型预测
 基于风险的交易决策（放行 / 警告 / 拦截）
 风险告警与交易审计记录
-适用于 课程设计、系统架构展示、区块链与安全研究实验。
+适用于课程设计、系统架构展示、区块链与安全研究实验。
 
 System Requirements | 环境要求
 OS: Windows 10 / 11
@@ -57,6 +44,10 @@ wallet-firewall-main
 │       ├── models.py            # Wallet / Transaction / Alert
 │       └── ui/                  # 前端静态页面
 │
+├── admin_dashboard/             # 管理端 Dashboard（Streamlit）
+│   ├── app_admin.py             # Dashboard 主入口
+│   └── requirements.txt
+│
 ├── data/
 │   ├── elliptic_txs_features.csv
 │   ├── elliptic_txs_edgelist.csv
@@ -69,17 +60,11 @@ wallet-firewall-main
 └── README.md
 
 Step 1 – Create Virtual Environment | 创建虚拟环境
-
-在项目根目录执行：
 py -3.11 -m venv .venv
-
-激活虚拟环境：
 .venv\Scripts\Activate.ps1
-
 
 验证 Python 版本：
 python --version
-
 期望输出：
 Python 3.11.x
 
@@ -93,92 +78,62 @@ pip install -r backend/requirements.txt
 Virtual Wallet（钱包系统）
 pip install -r virtual_wallet/requirements.txt
 
-Step 4 – Start AML Backend (FastAPI) | 启动 AML 后端
-打开一个终端（保持 .venv 已激活）：
+Admin Dashboard（管理端）
+pip install -r admin_dashboard/requirements.txt
+
+Step 4 – Start AML Backend | 启动 AML 后端
 python -m uvicorn backend.app.main:app --reload --port 8000
 
-
-成功后你会看到：
-Uvicorn running on http://127.0.0.1:8000
-Application startup complete.
-
-Swagger UI：
-http://127.0.0.1:8000/docs
+访问：
+API Docs: http://127.0.0.1:8000/docs
 
 Step 5 – Start Virtual Wallet System | 启动钱包系统
-
-打开 第二个终端（同样激活 .venv）：
 python -m uvicorn virtual_wallet.app.main:app --reload --port 8002
+
 
 访问 Wallet UI：
 http://127.0.0.1:8002
 
-Step 6 – Generate AML Test Sample | 生成 AML 测试样本（重要）
-AML 模型 严格依赖训练时的特征维度（165 维）。
-请勿手写 features。
-前置条件
-确认以下文件存在：
-backend/app/models/xgboost_aml_model.pkl
-data/elliptic_txs_features.csv
+Step 6 – Start Admin Dashboard | 启动管理端
+streamlit run admin_dashboard/app_admin.py --server.port 8501
 
-运行脚本
+
+访问 Dashboard：
+http://127.0.0.1:8501
+
+Step 7 – Generate AML Test Sample | 生成 AML 测试样本（重要）
 python make_sample.py
 
-
-终端期望输出类似：
-len(features) = 165
-{"features": [ ... 165 values ... ]}
-
-Step 7 – Test AML Prediction API | 测试 AML 接口
-打开浏览器：
+Step 8 – Test AML Prediction API | 测试 AML 接口
+访问 Swagger：
 http://127.0.0.1:8000/docs
 
-测试接口：
+接口：
 POST /risk/predict
 
-请求体粘贴 make_sample.py 输出的 JSON。
-Expected Response
-{
-  "prediction": "licit",
-  "risk_score": 0.0
-}
-
-
-含义：
-licit：模型判断为正常交易
-illicit：模型判断为高风险交易
 AML Decision Logic | AML 决策规则说明
-Wallet 系统基于 AML 返回结果做 三态决策：
 AML 结果	系统行为
-prediction = licit 且 risk_score < threshold	ALLOW（写入交易）
-prediction = licit 且 risk_score ≥ threshold	REQUIRE_CONFIRM / WARN
-prediction = illicit	BLOCK（直接拦截）
-所有高风险与中风险行为都会生成 Alert 记录，用于审计与监控。
+licit 且 risk_score < threshold	ALLOW
+licit 且 risk_score ≥ threshold	WARN / REQUIRE_CONFIRM
+illicit	BLOCK
+
+所有 WARN / BLOCK 行为都会生成 Alert 并显示在 Dashboard 中。
 
 Ports Summary | 端口说明
 Service	URL
 AML Backend API	http://127.0.0.1:8000
 AML Swagger UI	http://127.0.0.1:8000/docs
 Virtual Wallet UI	http://127.0.0.1:8002
+Admin Dashboard	http://127.0.0.1:8501
+
 Common Issues | 常见问题
-1. Connection refused (8000 / 8002)
-原因：对应服务未启动
-解决：确认两个 Uvicorn 服务都在运行
-
-2. Feature shape mismatch
-原因：AML 输入维度不正确
-解决：
-不要手写 features
-使用 make_sample.py
-
-3. Python version error
-原因：使用了 Python 3.13 / 3.14
-解决：切换到 Python 3.11.x
+Dashboard 显示 Backend DOWN → Backend 未启动
+Feature shape mismatch → 未使用 make_sample.py
+Python version error → 必须使用 Python 3.11.x
 
 Notes | 备注说明
-本项目为 教学 / 演示原型
-数据与规则为可解释性设计
-重点在 系统架构、风控流程与决策逻辑
+本项目为教学 / 演示原型
+重点在 系统架构、AML 决策流程与风险控制逻辑
 并非生产级金融系统
 
 Author / Usage
