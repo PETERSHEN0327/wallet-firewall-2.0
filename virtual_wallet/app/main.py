@@ -17,7 +17,12 @@ from .db import DATA_DIR, get_session, init_db
 from .generator import generate_transactions, generate_wallets
 from .models import Alert, Transaction, Wallet
 
-app = FastAPI(title="Virtual Wallet Lab", version="0.2.0")
+app = FastAPI(
+    title="Wallet Firewall API",
+    description="Virtual wallet transaction system with AML risk analysis and enforcement",
+    version="0.2.0",
+)
+
 
 BASE_DIR = Path(__file__).resolve().parent
 app.mount("/ui", StaticFiles(directory=str(BASE_DIR / "ui")), name="ui")
